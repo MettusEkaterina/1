@@ -1,0 +1,184 @@
+﻿@page "/fileInput"
+@using System.IO;
+@using BlazorApp3.Data
+@using DataJuggler.Blazor.FileUpload
+@inject VigenereCipherService vigenereService
+@inject InputService inputService
+@inject WordService service
+@inject IJSRuntime js
+
+<h1>Шифр Виженера</h1>
+<br />
+
+<div class="fileuploader">
+    <FileUpload OnChange="ReadFile"
+                FilterByExtension="true" AllowedExtensions=".doc;.docx;.txt"
+                CustomExtensionMessage="Разрешены только файлы .doc/.docx и .txt" ShowStatus="false">
+    </FileUpload>
+    @if (uploadStatus != null)
+    {
+        <div>@uploadStatus</div>
+    }
+</div>
+<br />
+
+<h5>Ключевое слово</h5>
+<div class="row align-items-start">
+    <div class="col-md-4 col-sm-12">
+        <div class="param_block">
+            <input type="text" class="form-control" id="keyWord" @bind="@KeyWord">
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-12">
+        <div class="param_block">
+            <div class="input-group mb-3">
+                <select class="custom-select" id="actionSelect" @bind="@ChosenAction">
+                    <option selected value="1">Расшифровать</option>
+                    <option value="2">Зашифровать</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-12">
+        <div class="filedownloader">
+            <select style="width: 100px" class="custom-select" id="extensionSelect" @bind="@ResultFileExtension">
+                <option selected value="1">.txt</option>
+                <option value="2">.docx</option>
+            </select>
+            <button @onclick="DownloadFile">Скачать файл</button>
+            <br />
+            @if (downloadStatus != null)
+            {
+                <div>@downloadStatus</div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (error != null)
+{
+    <div style="color: orangered">@error</div>
+}
+
+@functions
+{
+    string ChosenAction { get; set; }
+    string KeyWord { get; set; }
+    string CurrentInputFilePath { get; set; }
+    string InputFileName { get; set; }
+    string LastAction;
+    string ResultFileExtension { get; set; }
+    string uploadStatus;
+    string downloadStatus;
+    string error;
+    bool isFileUploaded;
+
+    private void ReadFile(UploadedFileInfo uploadedFileInfo)
+    {
+        if (uploadedFileInfo.Aborted)
+        {
+            uploadStatus = uploadedFileInfo.ErrorMessage;
+            isFileUploaded = false;
+            inputService.DeleteFile(CurrentInputFilePath);
+        }
+        else
+        {
+            try
+            {
+                inputService.DeleteFile(CurrentInputFilePath);
+                CurrentInputFilePath = uploadedFileInfo.NameWithPartialGuid;
+                InputFileName = uploadedFileInfo.Name;
+                LastAction = "";
+                error = null;
+                uploadStatus = "Файл " + InputFileName + " успешно загружен";
+                isFileUploaded = true;
+            }
+            catch (Exception e)
+            {
+                error = e.Message;
+                isFileUploaded = false;
+                uploadStatus = null;
+            }
+            finally
+            {
+                this.StateHasChanged();
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        KeyWord = @"скорпион";
+        ChosenAction = @"1";
+        ResultFileExtension = @"1";
+        isFileUploaded = false;
+    }
+
+    public async void DownloadFile()
+    {
+        try
+        {
+            if (!isFileUploaded)
+            {
+                error = "Файл для обработки не загружен";
+            }
+            else
+            {
+                bool encrypting;
+
+                if (ChosenAction.Equals("1"))
+                {
+                    encrypting = false;
+                    LastAction = "_decrypted";
+                }
+                else
+                {
+                    encrypting = true;
+                    LastAction = "_encrypted";
+                }
+
+                if (ResultFileExtension.Equals("1"))
+                {
+                    string InputText = await inputService.GetInputExampleAsync(CurrentInputFilePath);
+                    string ResultText = await vigenereService.GetResultTextAsync(InputText, KeyWord, encrypting);
+                    error = null;
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(ResultText);
+                    await js.SaveAs(Path.GetFileNameWithoutExtension(InputFileName) + LastAction + ".txt", bytes);
+                    downloadStatus = "Результат сохранен";
+                }
+                else
+                {
+                    if (Path.GetExtension(InputFileName).Equals(".txt"))
+                    {
+                        string InputText = await inputService.GetInputExampleAsync(CurrentInputFilePath);
+                        string ResultText = await vigenereService.GetResultTextAsync(InputText, KeyWord, encrypting);
+                        error = null;
+                        using (MemoryStream documentStream = service.CreateWord(ResultText))
+                        {
+                            await js.SaveAs(Path.GetFileNameWithoutExtension(InputFileName) + LastAction + ".docx", documentStream.ToArray());
+                            downloadStatus = "Результат сохранен";
+                        }
+                    }
+                    else
+                    {
+                        using (MemoryStream documentStream = service.CreateWord($"wwwroot\\Upload\\{CurrentInputFilePath}", KeyWord, encrypting))
+                        {
+                            await js.SaveAs(Path.GetFileNameWithoutExtension(InputFileName) + LastAction + ".docx", documentStream.ToArray());
+                            downloadStatus = "Результат сохранен";
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            error = e.Message;
+            downloadStatus = null;
+        }
+        finally
+        {
+            this.StateHasChanged();
+        }
+    }
+}
+

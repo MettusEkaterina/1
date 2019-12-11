@@ -1,0 +1,107 @@
+﻿@page "/"
+@using BlazorApp3.Data
+@inject VigenereCipherService vigenereService
+@inject InputService inputService
+
+<h1>Шифр Виженера</h1>
+<br />
+<div class="row align-items-start">
+    <div class="col-md-6 col-sm-12">
+        <div class="param_block">
+            <h3>Исходный текст</h3>
+            <textarea class="form-control-file" id="input" rows="10" @bind="@InputText"></textarea>
+        </div>
+    </div>
+    <div class="col-md-6 col-sm-12">
+        <div class="param_block">
+            <h3>Результат</h3>
+            <textarea readonly="readonly" class="form-control-file" id="result" rows="10" @bind="@ResultText"></textarea>
+        </div>
+    </div>
+</div>
+<br />
+
+<h5>Ключевое слово</h5>
+
+<div class="row align-items-start">
+    <div class="col-md-4 col-sm-12">
+        <div class="param_block">
+            <input type="text" class="form-control" id="keyWord" @bind="@KeyWord">
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-12">
+        <div class="param_block">
+            <div class="input-group mb-3">
+                <select class="custom-select" id="actionSelect" @bind="@ChosenAction">
+                    <option selected value="1">Расшифровать</option>
+                    <option value="2">Зашифровать</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-12">
+        <div class="param_block">
+            <button type="button" class="btn btn-primary" @onclick="Run">Преобразовать</button>
+        </div>
+    </div>
+</div>
+
+@if (error != null)
+{
+    <div style="color: orangered">@error</div>
+}
+
+@functions
+{
+    string ChosenAction { get; set; }
+    string KeyWord { get; set; }    
+    string InputText = "";
+    string ResultText = "";
+    string error;
+
+    public async void Run()
+    {
+        try
+        {
+            bool encrypting;
+
+            if (ChosenAction.Equals("1"))
+            {
+                encrypting = false;
+            }
+            else
+            {
+                encrypting = true;
+            }
+
+            ResultText = await vigenereService.GetResultTextAsync(InputText, KeyWord, encrypting);
+            error = null;
+        }
+        catch (Exception e)
+        {
+            error = e.Message;
+        }
+        finally
+        {
+            this.StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            InputText = await inputService.GetInputExampleAsync();
+        }
+        catch
+        {
+            InputText = "";
+        }
+        finally
+        {
+            KeyWord = @"скорпион";
+            ChosenAction = @"1";
+        }
+    }
+}
+
